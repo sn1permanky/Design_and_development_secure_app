@@ -1,0 +1,67 @@
+# Импортируем abc - абстрактный базовый класс, который служит шаблоном для проектирования других классов
+from abc import ABC, abstractmethod
+
+# Создаем класс Product и делаем его независимым от реализации валидатора, он только хранит данные
+class Product:
+    def __init__(self, price: float):
+        self.price = price
+
+# Создаем абстрактный валидатор, он определяет контракт для всех валидаторов
+class ProductValidator(ABC):
+    @abstractmethod # используем декоратор
+    def is_valid(self, product: Product) -> bool: # Создаем абстрактный метод is_valid
+        pass
+
+# Реализуем базовую валидацию и проверяем положительность цены. 
+# Здесь реализуем единственную ответственность
+class BasicProductValidator(ProductValidator):
+    def is_valid(self, product: Product) -> bool:
+        return product.price > 0
+
+# Валидатор для CustomerService 
+class CustomerServiceValidator(ProductValidator):
+    def is_valid(self, product: Product) -> bool:
+        return product.price > 100000
+
+# Контекст валидации 
+# Здесь реализуем Open/Closed Principle и инверсию зависимостей
+class ProductValidationContext:
+    def __init__(self, validator: ProductValidator):
+        self.validator = validator
+    
+    def set_validator(self, validator: ProductValidator):
+        self.validator = validator
+    
+    def validate_product(self, product: Product) -> bool:
+        return self.validator.is_valid(product)
+
+# Пример использования
+if __name__ == "__main__":
+    print("=== Тестирование системы валидации ===")
+    
+    # Тестируем разные цены
+    products = [
+        Product(50),      # Дешевый товар
+        Product(150000),  # Дорогой товар
+        Product(-100),    # Неверная цена
+        Product(0)        # Нулевая цена
+    ]
+    
+    basic_validator = BasicProductValidator()
+    customer_validator = CustomerServiceValidator()
+    context = ProductValidationContext(basic_validator)
+    
+    for i, product in enumerate(products, 1):
+        print(f"\n--- Продукт {i} с ценой {product.price} рублей ---")
+        
+        # Базовая валидация
+        context.set_validator(basic_validator)
+        basic_result = context.validate_product(product)
+        print(f"Базовая валидация: {'✓ Прошел' if basic_result else '✗ Не прошел'}")
+        
+        # Валидация для CustomerService
+        context.set_validator(customer_validator)
+        customer_result = context.validate_product(product)
+        print(f"CustomerService валидация: {'✓ Прошел' if customer_result else '✗ Не прошел'}")
+    
+    print("\n=== Код работает корректно ===")
