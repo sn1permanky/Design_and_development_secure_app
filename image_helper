@@ -1,0 +1,167 @@
+# Решение God Object проблемы с ImageHelper
+# Нужно решить с соблюдением принципов SOLID, главная идея - это разделение ответственности
+from abc import ABC, abstractmethod
+from typing import List, Optional
+import os
+import hashlib
+
+# Базовый класс для представления данных изображения
+class ImageData:
+    def __init__(self, data: bytes, filename: str):
+        self.data = data
+        self.filename = filename
+
+# Класс аккаунта
+class Account:
+    def __init__(self, user_id: int, username: str):
+        self.user_id = user_id
+        self.username = username
+
+# 1. Класс для управления файловыми операциями с изображениями
+class ImageFileManager:
+    def __init__(self, storage_path: str = "./images/"):
+        self.storage_path = storage_path
+        os.makedirs(storage_path, exist_ok=True)
+    
+    def save(self, image: ImageData) -> str:
+        """Сохранить изображение в файловой системе"""
+        filepath = os.path.join(self.storage_path, image.filename)
+        with open(filepath, 'wb') as f:
+            f.write(image.data)
+        print(f"Изображение сохранено: {filepath}")
+        return filepath
+    
+    def delete_duplicates(self) -> int:
+        """Удалить дубликаты изображений"""
+        if not os.path.exists(self.storage_path):
+            return 0
+            
+        files = os.listdir(self.storage_path)
+        file_hashes = {}
+        duplicates_count = 0
+        
+        for filename in files:
+            filepath = os.path.join(self.storage_path, filename)
+            if os.path.isfile(filepath):
+                with open(filepath, 'rb') as f:
+                    file_hash = hashlib.md5(f.read()).hexdigest()
+                
+                if file_hash in file_hashes:
+                    os.remove(filepath)
+                    duplicates_count += 1
+                    print(f"Удален дубликат: {filename}")
+                else:
+                    file_hashes[file_hash] = filename
+        
+        return duplicates_count
+
+# 2. Класс для выполнения операций обработки изображений
+class ImageProcessor:
+    def resize(self, image: ImageData, height: int, width: int) -> ImageData:
+        """Изменить размер изображения"""
+        print(f"Изменение размера {image.filename} на {width}x{height}")
+        new_filename = f"resized_{width}x{height}_{image.filename}"
+        return ImageData(image.data, new_filename)
+    
+    def invert_colors(self, image: ImageData) -> ImageData:
+        """Инвертировать цвета изображения"""
+        print(f"Инверсия цветов для {image.filename}")
+        new_filename = f"inverted_{image.filename}"
+        return ImageData(image.data, new_filename)
+
+# 3. Класс для управления метаданными изображений в базе данных
+class ImageDatabaseManager:
+    def __init__(self):
+        self.account_images = {}  # Простая имитация БД
+    
+    def set_as_account_picture(self, image: ImageData, account: Account) -> bool:
+        """Установить изображение как аватар пользователя"""
+        self.account_images[account.user_id] = image.filename
+        print(f"Изображение {image.filename} установлено как аватар для {account.username}")
+        return True
+    
+    def get_account_picture(self, account: Account) -> Optional[str]:
+        """Получить изображение аккаунта"""
+        return self.account_images.get(account.user_id)
+
+# 4. Класс для загрузки изображений из внешних источников
+class ImageDownloader:
+    def download(self, image_url: str) -> Optional[ImageData]:
+        """Загрузить изображение по URL (имитация)"""
+        try:
+            # Имитация загрузки
+            print(f"Загрузка изображения с {image_url}")
+            filename = image_url.split('/')[-1] or "downloaded_image.jpg"
+            fake_data = b"fake_image_data_from_" + image_url.encode()
+            return ImageData(fake_data, filename)
+        except Exception as e:
+            print(f"Ошибка загрузки: {e}")
+            return None
+
+# 5. Фасад для координации всех операций с изображениями
+class ImageService:
+    def __init__(self):
+        self.file_manager = ImageFileManager()
+        self.processor = ImageProcessor()
+        self.db_manager = ImageDatabaseManager()
+        self.downloader = ImageDownloader()
+    
+    def process_and_save_image(self, image_url: str, account: Account, 
+                             resize_height: int = None, resize_width: int = None) -> bool:
+        """Полный цикл обработки изображения"""
+        # Загрузить
+        image = self.downloader.download(image_url)
+        if not image:
+            return False
+        
+        # Обработать при необходимости
+        if resize_height and resize_width:
+            image = self.processor.resize(image, resize_height, resize_width)
+        
+        # Сохранить в файловой системе
+        self.file_manager.save(image)
+        
+        # Связать с аккаунтом в БД
+        return self.db_manager.set_as_account_picture(image, account)
+
+# Пример использования
+if __name__ == "__main__":
+    print("=== Демонстрация работы ImageService ===")
+    
+    # Создаем сервис
+    image_service = ImageService()
+    
+    # Создаем тестовых пользователей
+    accounts = [
+        Account(1, "valera_plumber"),
+        Account(2, "petya_welder"),
+        Account(3, "ivan_electrician")
+    ]
+    
+    # Тестируем разные сценарии
+    test_urls = [
+        "https://example.com/avatar1.jpg",
+        "https://example.com/profile2.png",
+        "https://example.com/photo3.gif"
+    ]
+    
+    print("\n--- Тестирование загрузки и обработки ---")
+    for i, (account, url) in enumerate(zip(accounts, test_urls)):
+        print(f"\nОбработка для пользователя {account.username}:")
+        success = image_service.process_and_save_image(
+            url, account, resize_height=200, resize_width=200
+        )
+        print(f"Результат: {'✓ Успешно' if success else '✗ Ошибка'}")
+    
+    print("\n--- Тестирование удаления дубликатов ---")
+    # Создаем несколько одинаковых файлов для теста
+    test_image = ImageData(b"test_data", "duplicate1.jpg")
+    image_service.file_manager.save(test_image)
+    
+    test_image2 = ImageData(b"test_data", "duplicate2.jpg")  # Тот же контент
+    image_service.file_manager.save(test_image2)
+    
+    deleted_count = image_service.file_manager.delete_duplicates()
+    print(f"Удалено дубликатов: {deleted_count}")
+    
+    print("\n=== Демонстрация функциональности завершена успешно ===")
