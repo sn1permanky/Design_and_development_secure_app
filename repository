@@ -1,0 +1,73 @@
+from dataclasses import dataclass
+
+# Вводим две основные сущности 
+
+@dataclass
+class AccountEntity:
+    id: int
+    login: str
+
+@dataclass
+class RoleEntity:
+    id: int
+    name: str
+
+
+# Создаем репозитории с единой зоной ответственности
+
+class AccountRepository:
+    def __init__(self):
+        self._store = {}
+    def save(self, entity: AccountEntity) -> None:
+        self._store[entity.id] = entity
+        print(f"[AccountRepository] saved: {entity}")
+    def get(self, entity_id: int) -> AccountEntity | None:
+        return self._store.get(entity_id)
+
+class RoleRepository:
+    def __init__(self):
+        self._store = {}
+    def save(self, entity: RoleEntity) -> None:
+        self._store[entity.id] = entity
+        print(f"[RoleRepository] saved: {entity}")
+    def get(self, entity_id: int) -> RoleEntity | None:
+        return self._store.get(entity_id)
+
+
+# Создаем реестр «тип → репозиторий», чтобы устранить ветвления, через диспе
+# Клиентский код не содержит if/elif, а выбирает функцию по ключу словаря и вызов её
+
+_registry = {
+    AccountEntity: AccountRepository(),
+    RoleEntity:   RoleRepository(),
+}
+
+def save_entity(entity) -> None:
+    # Исправление: явная проверка регистрации даёт понятную ошибку, вместо Keyerror, удобнее отлаживать
+    repo = _registry.get(type(entity))
+    if repo is None:
+        raise KeyError(f"Репозиторий для типа {type(entity).__name__} не зарегистрирован")
+    repo.save(entity)
+
+def get_repository(entity_type):
+    repo = _registry.get(entity_type)
+    if repo is None:
+        raise KeyError(f"Репозиторий для типа {entity_type.__name__} не зарегистрирован")
+    return repo
+
+
+# Проверка работоспонособности
+
+if __name__ == "__main__":
+    acc = AccountEntity(1, "vasya")
+    role = RoleEntity(10, "admin")
+
+    # Ни одного if/elif по типам — диспетчеризация через реестр:
+    save_entity(acc)
+    save_entity(role)
+
+    acc_repo = get_repository(AccountEntity)
+    role_repo = get_repository(RoleEntity)
+
+    print("Loaded account:", acc_repo.get(1))
+    print("Loaded role:", role_repo.get(10))
