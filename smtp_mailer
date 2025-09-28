@@ -1,0 +1,136 @@
+# Решение проблемы SmtpMailer 
+from abc import ABC, abstractmethod
+import datetime
+import os
+
+# Абстрактный интерфейс логгера, также используем абстраные метод по аналогии с product_validation
+class ILogger(ABC):
+    @abstractmethod
+    def log(self, log_text: str) -> None:
+        pass
+
+# Реализуем отдельный класс - файловый логгер
+class FileLogger(ILogger):
+    def __init__(self, filename: str = "smtp_log.txt"):
+        self.filename = filename
+    
+    def log(self, log_text: str) -> None:
+        """Сохранить лог в файле"""
+        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        with open(self.filename, 'a', encoding='utf-8') as f:
+            f.write(f"[{timestamp}] {log_text}\n")
+
+# Конкретная реализация - логгер в "базу данных" (файл)
+class DatabaseLogger(ILogger):
+    def __init__(self, db_file: str = "smtp_logs.db.txt"):
+        self.db_file = db_file
+    
+    def log(self, log_text: str) -> None:
+        """Сохранить лог в 'базе данных'"""
+        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        with open(self.db_file, 'a', encoding='utf-8') as f:
+            f.write(f"DB_LOG|{timestamp}|{log_text}\n")
+
+# Еще один логгер - для консоли (демонстрация расширяемости)
+class ConsoleLogger(ILogger):
+    def log(self, log_text: str) -> None:
+        """Вывести лог в консоль"""
+        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        print(f"[SMTP LOG {timestamp}] {log_text}")
+
+# SmtpMailer теперь зависит от абстракции, а не от конкретной реализации
+class SmtpMailer:
+    def __init__(self, logger: ILogger):
+        self.logger = logger  # Dependency Injection через конструктор
+        self.sent_count = 0
+    
+    def send_message(self, message: str, recipient: str) -> bool:
+        """Отправка сообщения"""
+        try:
+            # Логика отправки сообщения (упрощенная)
+            self.logger.log(f"Начинаем отправку сообщения для {recipient}")
+            
+            # Симуляция отправки
+            success = self._simulate_sending(message, recipient)
+            
+            if success:
+                self.sent_count += 1
+                self.logger.log(f"Сообщение успешно отправлено {recipient}. Всего отправлено: {self.sent_count}")
+            else:
+                self.logger.log(f"Ошибка отправки сообщения {recipient}")
+            
+            return success
+            
+        except Exception as e:
+            self.logger.log(f"Критическая ошибка при отправке: {str(e)}")
+            return False
+    
+    def _simulate_sending(self, message: str, recipient: str) -> bool:
+        """Симуляция отправки сообщения"""
+        # Здесь была бы реальная логика отправки
+        return len(message) > 0 and "@" in recipient and len(recipient) > 5
+
+# Фабрика для создания логгеров (дополнительный паттерн)
+class LoggerFactory:
+    @staticmethod
+    def create_logger(logger_type: str, **kwargs) -> ILogger:
+        """Создать логгер по типу"""
+        if logger_type == "file":
+            return FileLogger(kwargs.get("filename", "smtp_log.txt"))
+        elif logger_type == "database":
+            return DatabaseLogger(kwargs.get("db_file", "smtp_logs.db.txt"))
+        elif logger_type == "console":
+            return ConsoleLogger()
+        else:
+            raise ValueError(f"Неизвестный тип логгера: {logger_type}")
+
+# Пример использования
+if __name__ == "__main__":
+    print("=== Тестирование SmtpMailer от Валеры! ===")
+    
+    # Тестовые данные
+    test_messages = [
+        ("Привет от Валеры!", "vasya@example.com"),
+        ("Сообщение о ремонте", "petya@pipes.ru"),
+        ("Неверное сообщение", "invalid_email"),  # Тест с ошибкой
+        ("", "test@email.com"),  # Пустое сообщение
+        ("Нормальное сообщение", "ivan@work.com")
+    ]
+    
+    # Создание различных логгеров
+    loggers = {
+        "file": LoggerFactory.create_logger("file", filename="test_mail_log.txt"),
+        "database": LoggerFactory.create_logger("database", db_file="test_mail_logs.db.txt"),
+        "console": LoggerFactory.create_logger("console")
+    }
+    
+    # Тестирование с разными логгерами
+    for logger_name, logger in loggers.items():
+        print(f"\n=== Тестирование с {logger_name} логгером ===")
+        mailer = SmtpMailer(logger)
+        
+        for i, (message, recipient) in enumerate(test_messages, 1):
+            print(f"\nТест {i}: отправка '{message[:20]}...' для {recipient}")
+            success = mailer.send_message(message, recipient)
+            result = "✓ Отправлено" if success else "✗ Ошибка"
+            print(f"Результат: {result}")
+    
+    print("\n=== Проверяем содержимое файлов логов ===")
+    
+    # Читаем файловый лог
+    if os.path.exists("test_mail_log.txt"):
+        print("\n--- Файловый лог ---")
+        with open("test_mail_log.txt", 'r', encoding='utf-8') as f:
+            lines = f.readlines()[-3:]  # Последние 3 строки
+            for line in lines:
+                print(line.strip())
+    
+    # Читаем лог "базы данных"
+    if os.path.exists("test_mail_logs.db.txt"):
+        print("\n--- Лог базы данных ---")
+        with open("test_mail_logs.db.txt", 'r', encoding='utf-8') as f:
+            lines = f.readlines()[-3:]  # Последние 3 строки
+            for line in lines:
+                print(line.strip())
+    
+    print("\n=== SmtpMailer теперь закрыт для изменений, но открыт для расширения! ===")
